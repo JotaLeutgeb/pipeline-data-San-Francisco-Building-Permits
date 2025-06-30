@@ -41,6 +41,20 @@ test_cases = [
         [],
         [],
         "empty_dataframe"
+    ),
+    (
+        ['A', 'B', 'a'],
+        ['a', 'b', 'a_2'],
+        "case_sensitive_handling"
+    ),
+    (   ['a', 'B', 'A'],
+        ['a', 'b', 'a_2'],  
+        "case_sensitive_reversed_order"
+    ),
+    (
+        ['a', 'A', 'contact@email', 'a', 'contact_email'],
+        ['a', 'a_2', 'contact_email', 'a_3', 'contact_email_2'],
+        "multiple_collisions"
     )
 ]
 
