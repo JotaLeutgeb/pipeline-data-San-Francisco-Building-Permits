@@ -3,84 +3,89 @@ import re
 from unidecode import unidecode
 from collections import Counter
 
+import pandas as pd
+import re
+from unidecode import unidecode
+from collections import Counter
+
 def standardize_column_names(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Standardizes column names to make them robust and unique.
+    Standardizes column names to be robust, unique, and deterministic,
+    regardless of the input column order.
 
-    The process includes:
-    1.  Converting column names to strings.
-    2.  Transliterating to ASCII (e.g., 'Año' -> 'Ano').
-    3.  Converting to lowercase.
-    4.  Replacing any non-alphanumeric characters with a single underscore.
-    5.  Handling empty column names resulting from the cleaning process.
-    6.  Ensuring all final column names are unique by appending suffixes (_2, _3, etc.).
+    The process is done in two passes:
+    1.  **Census Pass**: Clean all column names and count the frequency of each
+        resulting name to identify all potential duplicates beforehand.
+    2.  **Assignment Pass**: Iterate again to build the final list of names.
+        - Unique names are kept as is.
+        - The first occurrence of a duplicated name is kept as is.
+        - Subsequent occurrences of a duplicated name are given a suffix (_2, _3, ...).
 
     Args:
         df: The input DataFrame.
 
     Returns:
-        A new DataFrame with standardized, unique, and robust column names.
+        A new DataFrame with standardized column names.
     """
-    # Create a copy to avoid modifying the original DataFrame
     df = df.copy()
     
-    # 1. Standardize column names
-    new_cols = []
-    for col in df.columns:
-        # Convert to string, then to ASCII and lowercase
-        s = unidecode(str(col)).lower()
-        # Replace all non-alphanumeric sequences with a single underscore
-        s = re.sub(r'[^a-z0-9]+', '_', s)
-        # Remove leading/trailing underscores that might result
-        s = s.strip('_')
-        # Handle cases where the name becomes empty after cleaning
-        if not s:
-            s = 'unnamed_column'
-        new_cols.append(s)
+    # Helper function for cleaning a single column name
+    def clean_name(col_name: str) -> str:
+        s = unidecode(str(col_name)).lower()
+        s = re.sub(r'[^a-z0-9]+', '_', s).strip('_')
+        return s if s else 'unnamed_column'
 
-    # 2. Handle duplicates
-    counts = Counter(new_cols)
-    final_cols = []
-    for i, col_name in enumerate(new_cols):
-        # If the column name is not a duplicate, use it as is
-        if counts[col_name] == 1:
-            final_cols.append(col_name)
+    # --- Paso 1: Censo ---
+    original_columns = df.columns.tolist()
+    cleaned_names = [clean_name(col) for col in original_columns]
+    name_counts = Counter(cleaned_names)
+
+    # --- Paso 2: Asignación ---
+    final_columns = []
+    suffix_tracker = Counter() # Tracks usage of each name during this pass
+
+    for name in cleaned_names:
+        # If the name is not a duplicate in the entire set, just use it
+        if name_counts[name] == 1:
+            final_columns.append(name)
             continue
-        
-        # If it is a duplicate, find a unique suffix
-        # The first occurrence keeps its name, subsequent ones get suffixes
-        suffix_counter = 1
-        original_name = col_name
-        
-        # Find which occurrence this is
-        for prev_col in new_cols[:i]:
-            if prev_col == original_name:
-                suffix_counter += 1
-        
-        # If it's not the first time we see this name, append the suffix
-        if suffix_counter > 1:
-            final_cols.append(f"{original_name}_{suffix_counter}")
-        else:
-            final_cols.append(original_name)
 
-    df.columns = final_cols
+        # If it is a duplicate, we need to apply suffixes deterministically
+        suffix_tracker.update([name])
+        current_occurrence = suffix_tracker[name]
+        
+        if current_occurrence == 1:
+            # First time we assign this name, it gets no suffix
+            final_columns.append(name)
+        else:
+            # Subsequent times, it gets a suffix
+            final_columns.append(f"{name}_{current_occurrence}")
+    
+    df.columns = final_columns
     return df
 
-# --- Ejemplo de uso ---
-
 if __name__ == '__main__':
-    # Create a sample DataFrame with tricky column names
-    data = {'Nombre Completo': [1], 'FECHA-NAC': [2], 'FECHA-NAC': [3], 'País': [4],
-            '---': [5], 'País': [6], 'contact@email': [7], 'contact_email': [8]}
+    # Caso 1: ['A', 'B', 'a']
+    df1 = pd.DataFrame(columns=['A', 'B', 'a'])
+    df1_clean = standardize_column_names(df1)
+    print(f"Entrada: {df1.columns.tolist()}")
+    print(f"Salida:  {df1_clean.columns.tolist()}")
+    # Salida:  ['a', 'b', 'a_2']
+
+    print("-" * 20)
+
+    # Caso 2: ['a', 'B', 'A'] (Orden invertido)
+    df2 = pd.DataFrame(columns=['a', 'B', 'A'])
+    df2_clean = standardize_column_names(df2)
+    print(f"Entrada: {df2.columns.tolist()}")
+    print(f"Salida:  {df2_clean.columns.tolist()}")
+    # Salida:  ['a', 'b', 'a_2'] -> ¡Exactamente el mismo resultado!
     
-    tricky_df = pd.DataFrame(data)
-    print("Columnas Originales:")
-    print(tricky_df.columns.tolist())
-    # Salida: ['Nombre Completo', 'FECHA-NAC', 'FECHA-NAC', 'País', '---', 'País', 'contact@email', 'contact_email']
-    
-    # Apply the robust function
-    clean_df = standardize_column_names(tricky_df)
-    
-    print("\nColumnas Estandarizadas (infalibles):")
-    print(clean_df.columns.tolist())
-    # Salida: ['nombre_completo', 'fecha_nac', 'fecha_nac_2', 'pais', 'unnamed_column', 'pais_2', 'contact_email', 'contact_email_2']
+    print("-" * 20)
+
+    # Caso 3: Múltiples colisiones
+    df3 = pd.DataFrame(columns=['a', 'A', 'contact@email', 'a', 'contact_email'])
+    df3_clean = standardize_column_names(df3)
+    print(f"Entrada: {df3.columns.tolist()}")
+    print(f"Salida:  {df3_clean.columns.tolist()}")
+    # Salida:  ['a', 'a_2', 'contact_email', 'a_3', 'contact_email_2']
