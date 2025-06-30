@@ -21,6 +21,5 @@ Thumbs.db
 .ipynb_checkpoints
 
 # Ignorar tipos de archivo de datos por si acaso
-*.csv
-*.csv.gz
-*.parquet 
+data/processed
+data/raw
