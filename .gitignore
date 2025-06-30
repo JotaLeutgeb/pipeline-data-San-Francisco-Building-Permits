@@ -24,10 +24,3 @@ Thumbs.db
 *.csv
 *.csv.gz
 *.parquet 
-
-# Ignorar todo el contenido DENTRO de estas carpetas de datos
-data/source/*
-data/raw/*
-data/processed/*
-# Pero no ignores los archivos .gitkeep que están dentro
-!*/.gitkeep
