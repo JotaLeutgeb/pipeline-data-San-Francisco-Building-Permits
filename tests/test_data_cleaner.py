@@ -39,6 +39,30 @@ class TestDataCleaner(unittest.TestCase):
         with self.assertRaises(TypeError):
             DataCleaner("no es un dataframe")
 
+    def test_standardize_is_order_independent(self):
+        """
+        Verifica que la estandarización de columnas es independiente del orden.
+        """
+        data = {'Permit Type': [1], 'Permit type': [2], 'Permit Status': [3]}
+        
+        # DataFrame 1
+        df1 = pd.DataFrame(data)
+        
+        # DataFrame 2 con las mismas columnas en orden diferente
+        df2 = pd.DataFrame(data, columns=['Permit type', 'Permit Status', 'Permit Type'])
+
+        cleaner1 = DataCleaner(df1)
+        cleaner2 = DataCleaner(df2)
+
+        standardized_df1 = cleaner1._standardize_column_names()
+        standardized_df2 = cleaner2._standardize_column_names()
+
+        # El resultado de las columnas debe ser idéntico
+        self.assertListEqual(list(standardized_df1.columns), ['permittype_0', 'permittype_1', 'permitstatus'])
+        
+        # Y debe ser igual entre ambos DataFrames, sin importar el orden original
+        self.assertListEqual(list(standardized_df1.columns), list(standardized_df2.columns))
+
     def test_drop_unnecessary_columns(self):
         """
         Prueba la eliminación de columnas.
