@@ -11,7 +11,7 @@ DB_PASSWORD = os.getenv("DB_PASSWORD")
 API_KEY = os.getenv("API_KEY")
 
 # 1. Definir la ruta raíz del proyecto.
-ROOT_DIR = Path(__file__).resolve().parent
+ROOT_DIR = Path(__file__).resolve().parent.parent
 
 # 2. Construir otras rutas importantes a partir de la ruta raíz.
 # La sintaxis con "/" es la magia de pathlib, funciona en Windows, Mac y Linux.
