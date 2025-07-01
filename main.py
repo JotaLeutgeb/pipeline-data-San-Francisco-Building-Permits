@@ -1,56 +1,39 @@
-# main.py
-
-import pandas as pd
 import logging
-import os
+import pandas as pd
+from configs import config
 from src.data_cleaner import DataCleaner
-from configs.config import RAW_DATA_DIR, PROCESSED_DATA_DIR, CONFIGS_DIR
 
-# --- Configure Logging ---
-# A best practice to see the pipeline's progress and debug issues.
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("pipeline.log"),
-        logging.StreamHandler()
-    ]
-)
+# Configuración básica del logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
-def main():
+def run_pipeline():
     """
-    Main function to orchestrate the data loading, cleaning, and saving process.
+    Función principal que ejecuta el pipeline de limpieza de datos.
+
+    Carga los datos, los limpia usando la clase DataCleaner y los guarda
+    en un nuevo archivo CSV.
     """
-    logging.info("Starting the main application.")
-    
-    # --- 1. Define Paths ---
-    # Using the centralized config for robustness.
+    logging.info("Iniciando el pipeline de datos.")
+
     try:
-        raw_data_path = os.path.join(RAW_DATA_DIR, 'building-permits.csv')
-        processed_data_path = os.path.join(PROCESSED_DATA_DIR, 'building-permits-cleaned.csv')
-        config_path = os.path.join(CONFIGS_DIR, 'cleaning_config.yaml')
-        
-        # --- 2. Load Data ---
-        logging.info(f"Loading raw data from: {raw_data_path}")
-        df_raw = pd.read_csv(raw_data_path, low_memory=False)
-        
-        # --- 3. Clean Data ---
-        # Instantiate the cleaner and run the full pipeline.
-        cleaner = DataCleaner(df=df_raw, config_path=config_path)
-        df_clean = cleaner.run_pipeline()
-        
-        # --- 4. Save Data ---
-        logging.info(f"Saving cleaned data to: {processed_data_path}")
-        os.makedirs(PROCESSED_DATA_DIR, exist_ok=True) # Ensure the directory exists
-        df_clean.to_csv(processed_data_path, index=False)
-        
-        logging.info("✅ Application finished successfully.")
-        
-    except FileNotFoundError as e:
-        logging.error(f"Critical Error: A file was not found. Please check paths. Details: {e}")
-    except Exception as e:
-        logging.error(f"An unexpected error occurred in the main pipeline.", exc_info=True)
+        # Cargar los datos
+        logging.info(f"Cargando datos desde: {config.DATA_PATH}")
+        df = pd.read_csv(config.DATA_PATH)
+        logging.info("Datos cargados exitosamente.")
 
+        # Limpiar los datos
+        cleaner = DataCleaner(df)
+        cleaned_df = cleaner.clean_data(config.CLEANING_CONFIG)
+
+        # Guardar los datos limpios
+        logging.info(f"Guardando datos limpios en: {config.CLEANED_DATA_PATH}")
+        cleaned_df.to_csv(config.CLEANED_DATA_PATH, index=False)
+        logging.info("Pipeline completado exitosamente.")
+
+    except FileNotFoundError:
+        logging.error(f"Error: No se encontró el archivo de datos en {config.DATA_PATH}")
+    except Exception as e:
+        logging.error(f"Ha ocurrido un error inesperado durante la ejecución del pipeline: {e}")
 
 if __name__ == '__main__':
-    main()
+    run_pipeline()

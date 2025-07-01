@@ -1,149 +1,88 @@
-import pytest
+import unittest
 import pandas as pd
 import numpy as np
-import os
-from src.data_cleaner import DataCleaner  # Make sure this import works based on your project structure
+from src.data_cleaner import DataCleaner
 
-@pytest.fixture
-def test_config_path(tmp_path) -> str:
+class TestDataCleaner(unittest.TestCase):
     """
-    A pytest fixture that creates a temporary test config YAML file and returns its path.
-    This ensures tests are isolated and don't depend on the main config file.
+    Suite de pruebas para la clase DataCleaner.
     """
-    config_content = """
-null_threshold_drop: 0.5
-null_handling:
-  fill_with_value:
-    - columns: ['estimated_cost', 'revised_cost', 'units']
-      value: 0
-    - columns: ['description']
-      value: 'N/A'
-  impute_from_other_column:
-    - target_column: 'revised_cost'
-      source_column: 'estimated_cost'
-type_conversion:
-  to_datetime:
-    - ends_with: '_date'
-  to_numeric:
-    - contains: 'cost'
-    - contains: 'units'
-    """
-    config_file = tmp_path / "test_cleaning_config.yaml"
-    config_file.write_text(config_content)
-    return str(config_file)
 
-# --- 1. Tests for Column Name Standardization ---
+    def setUp(self):
+        """
+        Configura los datos de prueba antes de cada test.
+        """
+        # CORRECCIÓN: Se añade un 'St' extra para que sea la moda inequívoca.
+        data = {
+            'Permit Number': [1, 2, 3, 4],
+            'Permit Type': [1, 2, 3, 1],
+            'Street Suffix': ['St', 'Av', 'St', np.nan], # <-- 'St' es ahora la moda
+            'Fire Only Permit': ['Y', np.nan, 'N', 'Y'],
+            'Permit Creation Date': ['20230101', '20230102', '20230103', '20230104'],
+            'Existing Use': ['office', 'retail', 'residential', 'office'],
+            'Zipcode': [94102, 94103, 94102, 94102],
+            'useless_col': [0, 0, 0, 0]
+        }
+        self.df = pd.DataFrame(data)
+        self.config = {
+            'cols_to_drop': ['useless_col'],
+            'date_cols': ['Permit Creation Date']
+        }
 
-# Define test cases for parameterization
-column_test_cases = [
-    # input_columns, expected_columns, test_id
-    (['First Name', 'Last-Name'], ['first_name', 'last_name'], 'basic_cleaning'),
-    (['Año', 'País (ISO)'], ['ano', 'pais_iso'], 'special_chars'),
-    (['col A', 'col_A', 'COL-A'], ['col_a', 'col_a_2', 'col_a_3'], 'duplicates'),
-    (['__', '-'], ['unnamed_column', 'unnamed_column_2'], 'empty_names'),
-]
+    def test_initialization(self):
+        """
+        Prueba que la clase se inicializa correctamente con un DataFrame.
+        """
+        cleaner = DataCleaner(self.df)
+        self.assertIsInstance(cleaner.df, pd.DataFrame)
+        # Prueba que se lanza un error si no se pasa un DataFrame
+        with self.assertRaises(TypeError):
+            DataCleaner("no es un dataframe")
 
-@pytest.mark.parametrize("input_cols, expected_cols, test_id", column_test_cases, ids=[case[2] for case in column_test_cases])
-def test_standardize_column_names(input_cols, expected_cols, test_id, test_config_path):
-    """Tests the standardization of column names with various scenarios."""
-    # Setup
-    df_input = pd.DataFrame(columns=input_cols)
-    cleaner = DataCleaner(df_input, test_config_path)
+    def test_drop_unnecessary_columns(self):
+        """
+        Prueba la eliminación de columnas.
+        """
+        cleaner = DataCleaner(self.df)
+        cleaned_df = cleaner.clean_data(self.config)
+        self.assertNotIn('useless_col', cleaned_df.columns)
+        self.assertIn('Permit Number', cleaned_df.columns)
 
-    # Action
-    cleaner.standardize_column_names()
+    def test_impute_missing_values(self):
+        """
+        Prueba la imputación de valores faltantes.
+        """
+        cleaner = DataCleaner(self.df)
+        cleaned_df = cleaner.clean_data(self.config)
 
-    # Assert
-    assert cleaner.df.columns.tolist() == expected_cols
+        # 'Fire Only Permit' NaN debe ser 'N'
+        self.assertEqual(cleaned_df.loc[1, 'Fire Only Permit'], 'N')
+        # 'Street Suffix' NaN debe ser imputado con la moda ('St')
+        # Con los datos corregidos, esta aserción ahora siempre será verdadera.
+        self.assertEqual(cleaned_df.loc[3, 'Street Suffix'], 'St')
 
-# --- 2. Tests for Handling Missing Values ---
+    def test_convert_to_datetime(self):
+        """
+        Prueba la conversión de columnas a formato datetime.
+        """
+        cleaner = DataCleaner(self.df)
+        cleaned_df = cleaner.clean_data(self.config)
+        self.assertTrue(pd.api.types.is_datetime64_any_dtype(cleaned_df['Permit Creation Date']))
 
-def test_handle_missing_values_imputation_and_filling(test_config_path):
-    """Tests if nulls are correctly imputed from another column and filled with specified values."""
-    # Setup
-    data = {
-        'estimated_cost': [1000, 2000, np.nan],
-        'revised_cost': [np.nan, 2500, 3000],
-        'units': [1, np.nan, 3]
-    }
-    df_input = pd.DataFrame(data)
-    cleaner = DataCleaner(df_input, test_config_path)
+    def test_clean_data_pipeline(self):
+        """
+        Prueba el pipeline de limpieza de datos completo.
+        """
+        cleaner = DataCleaner(self.df)
+        cleaned_df = cleaner.clean_data(self.config)
 
-    # Action
-    cleaner.handle_missing_values()
+        # Verificar que se ejecutaron todos los pasos
+        self.assertNotIn('useless_col', cleaned_df.columns)
+        self.assertFalse(cleaned_df['Fire Only Permit'].isnull().any())
+        self.assertFalse(cleaned_df['Street Suffix'].isnull().any())
+        self.assertTrue(pd.api.types.is_datetime64_any_dtype(cleaned_df['Permit Creation Date']))
+        # El DataFrame de salida debe tener el mismo número de filas que el original
+        self.assertEqual(len(cleaned_df), len(self.df))
 
-    # Assert
-    expected_revised = pd.Series([1000.0, 2500.0, 3000.0], name='revised_cost')
-    expected_units = pd.Series([1.0, 0.0, 3.0], name='units')
-    
-    pd.testing.assert_series_equal(cleaner.df['revised_cost'], expected_revised)
-    pd.testing.assert_series_equal(cleaner.df['units'], expected_units)
-
-def test_handle_missing_values_dropping_by_threshold(test_config_path):
-    """Tests if columns with a high percentage of nulls are dropped correctly."""
-    # Setup
-    data = {
-        'col_to_keep': [1, 2, 3, np.nan, 5],       # 20% nulls
-        'col_to_drop': [1, np.nan, np.nan, np.nan, 5]  # 60% nulls (threshold is 50%)
-    }
-    df_input = pd.DataFrame(data)
-    cleaner = DataCleaner(df_input, test_config_path)
-
-    # Action
-    cleaner.handle_missing_values()
-
-    # Assert
-    assert 'col_to_keep' in cleaner.df.columns
-    assert 'col_to_drop' not in cleaner.df.columns
-
-# --- 3. Test for Data Type Correction ---
-
-def test_correct_data_types(test_config_path):
-    """Tests if data types are correctly converted based on the config."""
-    # Setup
-    data = {
-        'permit_creation_date': ['2025-01-01', '2025-02-10'],
-        'estimated_cost': ['100.50', '200'],
-        'some_string': ['A', 'B']
-    }
-    df_input = pd.DataFrame(data)
-    cleaner = DataCleaner(df_input, test_config_path)
-
-    # Action
-    cleaner.correct_data_types()
-
-    # Assert
-    assert pd.api.types.is_datetime64_any_dtype(cleaner.df['permit_creation_date'])
-    assert pd.api.types.is_numeric_dtype(cleaner.df['estimated_cost'])
-    assert pd.api.types.is_string_dtype(cleaner.df['some_string'])
-
-# --- 4. Integration Test for the Full Pipeline ---
-
-def test_run_pipeline_end_to_end(test_config_path):
-    """An integration test to ensure the full pipeline runs correctly."""
-    # Setup
-    dirty_data = {
-        'Permit Type': [1, 2],
-        'estimated_cost': ['5000', np.nan],
-        'Permit Creation Date': ['2025-01-30', 'invalid-date'],
-        'Very Null Col': [np.nan, np.nan] # Should be dropped
-    }
-    df_input = pd.DataFrame(dirty_data)
-    cleaner = DataCleaner(df_input, test_config_path)
-
-    # Action
-    clean_df = cleaner.run_pipeline()
-
-    # Assertions
-    # Column names are clean?
-    assert 'permit_type' in clean_df.columns
-    assert 'very_null_col' not in clean_df.columns
-    
-    # Data types are correct?
-    assert pd.api.types.is_datetime64_any_dtype(clean_df['permit_creation_date'])
-    
-    # Nulls handled?
-    assert clean_df['estimated_cost'].isnull().sum() == 0
-    
-    # Values are correct? (e.g., coercion to NaT for invalid dates)
-    assert pd.isna(clean_df.loc[1, 'permit_creation_date'])
+if __name__ == '__main__':
+    unittest.main()
