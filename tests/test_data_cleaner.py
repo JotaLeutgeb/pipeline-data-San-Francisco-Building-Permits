@@ -28,7 +28,7 @@ type_conversion:
     - contains: 'cost'
     - contains: 'units'
     """
-    config_file = tmp_path / "test_config.yaml"
+    config_file = tmp_path / "test_cleaning_config.yaml"
     config_file.write_text(config_content)
     return str(config_file)
 
