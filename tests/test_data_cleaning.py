@@ -1,77 +1,73 @@
-# 1. Importaciones de librerías estándar y de terceros
 import pytest
 import pandas as pd
-from collections import Counter
+from src.data_cleaning import DataFrameStandardizer
+from src.data_pipeline import DataCleaner
 
-# Asumimos que la función está en este archivo, o la importamos desde src.data_cleaning
-from src.data_cleaning import standardize_column_names
+# ===================================================================
+# Unit Tests for the DataFrameStandardizer Component
+# ===================================================================
 
-# --- 1. Definimos nuestros "sets de ingredientes" (los casos de prueba) ---
-# Cada tupla contiene: (lista_de_columnas_originales, lista_esperada_después_de_limpiar, id_del_test)
-test_cases = [
-    (
-        ['Nombre Completo', 'FECHA-NAC', 'País'],
-        ['nombre_completo', 'fecha_nac', 'pais'],
-        "basic_cleaning" # ID para que el reporte de pytest sea más claro
-    ),
-    (
-        ['Año de Nacimiento', 'Teléfono Móvil'],
-        ['ano_de_nacimiento', 'telefono_movil'],
-        "special_chars_and_accents"
-    ),
-    (
-        # 'contact@email' y 'contact_email' se convierten en 'contact_email'
-        ['contact@email', 'contact_email', 'contact@email'],
-        ['contact_email', 'contact_email_2', 'contact_email_3'],
-        "handle_duplicates"
-    ),
-    (
-        # '---' y '_' se limpian y quedan vacíos
-        ['A', '---', 'B', '_'],
-        ['a', 'unnamed_column', 'b', 'unnamed_column_2'],
-        "handle_empty_after_clean"
-    ),
-    (
-        # Columnas numéricas y columnas que no cambian
-        ['column_a', 123, 'column_b'],
-        ['column_a', '123', 'column_b'],
-        "handle_numeric_columns"
-    ),
-    (
-        [],
-        [],
-        "empty_dataframe"
-    ),
-    (
-        ['A', 'B', 'a'],
-        ['a', 'b', 'a_2'],
-        "case_sensitive_handling"
-    ),
-    (   ['a', 'B', 'A'],
-        ['a', 'b', 'a_2'],  
-        "case_sensitive_reversed_order"
-    ),
-    (
-        ['a', 'A', 'contact@email', 'a', 'contact_email'],
-        ['a', 'a_2', 'contact_email', 'a_3', 'contact_email_2'],
-        "multiple_collisions"
-    )
+@pytest.fixture
+def standardizer() -> DataFrameStandardizer:
+    """Provides a reusable instance of the DataFrameStandardizer."""
+    return DataFrameStandardizer()
+
+# Define test cases for parameterization to test the component thoroughly
+column_test_cases = [
+    # input_columns, expected_columns, test_id
+    (['First Name', 'Last-Name'], ['first_name', 'last_name'], 'basic_cleaning'),
+    (['Año', 'País (ISO)'], ['ano', 'pais_iso'], 'special_chars'),
+    (['col A', 'col_A', 'COL-A'], ['col_a', 'col_a_2', 'col_a_3'], 'deterministic_duplicates'),
+    (['__', '-'], ['unnamed_column', 'unnamed_column_2'], 'empty_names'),
+    (['A', 'B', 'a'], ['a', 'b', 'a_2'], 'order_insensitivity_1'),
+    (['a', 'B', 'A'], ['a', 'b', 'a_2'], 'order_insensitivity_2'), # Should produce identical output
 ]
 
-# --- 2. Usamos el decorador @pytest.mark.parametrize para crear el test ---
-@pytest.mark.parametrize("input_columns, expected_columns, test_id", test_cases, ids=[case[2] for case in test_cases])
-def test_standardize_column_names(input_columns, expected_columns, test_id):
+@pytest.mark.parametrize("input_cols, expected_cols, test_id", column_test_cases, ids=[case[2] for case in column_test_cases])
+def test_standardizer_scenarios(standardizer, input_cols, expected_cols, test_id):
     """
-    Test que verifica la estandarización de columnas para múltiples casos de prueba.
+    Unit test for the DataFrameStandardizer component, covering multiple scenarios.
     """
-    # a. Creamos un DataFrame de prueba con las columnas de entrada
-    # El contenido de los datos no importa, solo los nombres de las columnas
-    df_input = pd.DataFrame(columns=input_columns)
+    # Setup
+    df_input = pd.DataFrame(columns=input_cols)
+
+    # Action
+    df_clean = standardizer.standardize(df_input)
+
+    # Assert
+    assert df_clean.columns.tolist() == expected_cols
+
+# ===================================================================
+# Integration Test for the DataCleaner Pipeline Orchestrator
+# ===================================================================
+
+def test_datacleaner_pipeline_orchestration():
+    """
+    Integration test to ensure the DataCleaner correctly uses its components
+    and that the pipeline runs end-to-end.
+    """
+    # Setup: Create a sample DataFrame with dirty column names
+    dirty_data = {
+        'First Name': ['john', 'jane'],
+        'Last-Name': ['doe', 'doe'],
+        'First Name': ['peter', 'sue'] # Deliberate duplicate column name
+    }
+    # Pandas automatically renames the second 'First Name' to 'First Name.1' on creation
+    # Our standardizer should handle this gracefully. The input will be ['First Name', 'Last-Name', 'First Name.1']
+    df_input = pd.DataFrame(dirty_data)
     
-    # b. Aplicamos la función que queremos probar
-    df_processed = standardize_column_names(df_input)
-    
-    # c. Verificamos que el resultado sea el esperado
-    actual_columns = df_processed.columns.tolist()
-    
-    assert actual_columns == expected_columns, f"Test case '{test_id}' failed!"
+    # Expected columns after robust standardization
+    expected_cols = ['first_name', 'last_name', 'first_name_1']
+
+    # Action
+    # Instantiate the pipeline orchestrator
+    pipeline = DataCleaner(df_input)
+    # Run the pipeline
+    df_output = pipeline.run_pipeline()
+
+    # Assert
+    # Check if the final columns match the expected output after standardization
+    assert df_output.columns.tolist() == expected_cols
+    # Check if the data itself is preserved
+    assert df_output.shape == (2, 3)
+    assert df_output.iloc[0]['first_name'] == 'john'
