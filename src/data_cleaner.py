@@ -2,7 +2,8 @@
 
 import logging
 import pandas as pd
-from typing import List, Dict
+from typing import Dict
+from collections import defaultdict
 from src.data_processing import DataProcessor
 
 logger = logging.getLogger(__name__)
@@ -15,25 +16,46 @@ class DataCleaner:
         self.processor = DataProcessor()
 
     def _standardize_column_names(self):
-        """Estandariza los nombres de columna en self.df."""
-        logger.info("Estandarizando nombres de columnas.")
-        original_cols = self.df.columns
-        cleaned_cols = [''.join(filter(str.isalnum, col.lower().replace(' ', '_'))) for col in original_cols]
+        """
+        Estandariza los nombres de las columnas de forma determinista.
+
+        La estrategia es inmune al orden de las columnas de entrada:
+        1.  Limpia todos los nombres de columna (minúsculas, sin espacios, etc.).
+        2.  Agrupa los nombres de columna originales por su versión limpia.
+        3.  Para los grupos con múltiples columnas, asigna sufijos (_0, _1)
+            basándose en el orden alfabético de los nombres originales.
+        4.  Finalmente, reordena las columnas del DataFrame según el orden
+            alfabético de los nombres originales para garantizar una salida canónica.
+        """
+        logger.info("Estandarizando nombres de columnas de forma determinista.")
         
-        counts = {name: cleaned_cols.count(name) for name in cleaned_cols}
+        original_cols = self.df.columns.tolist()
         
-        final_cols = []
-        suffix_counts: Dict[str, int] = {}
-        for col_name in cleaned_cols:
-            if counts[col_name] > 1:
-                current_suffix = suffix_counts.get(col_name, 0)
-                final_cols.append(f"{col_name}_{current_suffix}")
-                suffix_counts[col_name] = current_suffix + 1
+        # Mapa de nombre limpio a lista de nombres originales que lo producen
+        cleaned_to_originals = defaultdict(list)
+        for col in original_cols:
+            cleaned_name = ''.join(filter(str.isalnum, col.lower().replace(' ', '_')))
+            cleaned_to_originals[cleaned_name].append(col)
+
+        # Crear el mapa de renombrado final
+        renaming_map: Dict[str, str] = {}
+        for cleaned_name, original_group in cleaned_to_originals.items():
+            if len(original_group) == 1:
+                renaming_map[original_group[0]] = cleaned_name
             else:
-                final_cols.append(col_name)
+                # Ordenar alfabéticamente para un sufijo determinista
+                original_group.sort()
+                for i, original_col in enumerate(original_group):
+                    renaming_map[original_col] = f"{cleaned_name}_{i}"
         
-        self.df.columns = final_cols
-        logger.info(f"Nombres de columnas estandarizados: {self.df.columns.tolist()}")
+        # Aplicar el renombrado
+        self.df = self.df.rename(columns=renaming_map)
+        
+        # Ordenar las columnas del DataFrame de forma canónica
+        final_ordered_cols = sorted(self.df.columns)
+        self.df = self.df[final_ordered_cols]
+        
+        logger.info(f"Nombres de columnas estandarizados y ordenados: {self.df.columns.tolist()}")
 
     def _remove_duplicates(self):
         """Elimina duplicados usando el DataProcessor en self.df."""
@@ -73,16 +95,34 @@ class DataCleaner:
 
     def run_cleaning_pipeline(self, config: dict) -> pd.DataFrame:
         """
-        Ejecuta el pipeline de limpieza completo en el orden correcto.
+        Ejecuta el pipeline de limpieza completo en un orden definido y justificado.
+
+        Procedimiento del Pipeline:
+        1.  Estandarizar Nombres (_standardize_column_names):
+            - Justificación: Garantiza un acceso fiable y predecible a las
+              columnas en todos los pasos posteriores. Es un prerrequisito.
+        2.  Eliminar Duplicados (_remove_duplicates):
+            - Justificación: Evita procesar datos redundantes, mejorando el
+              rendimiento y la precisión de los análisis futuros.
+        3.  Imputar Valores Faltantes (_impute_missing_values):
+            - Justificación: Asegura que los modelos o cálculos posteriores no
+              fallen debido a valores nulos.
+        4.  Convertir a Datetime (_convert_to_datetime):
+            - Justificación: Permite realizar operaciones de series temporales
+              y cálculos basados en fechas.
+        5.  Eliminar Columnas Innecesarias (_drop_unnecessary_columns):
+            - Justificación: Reduce el uso de memoria y simplifica el conjunto
+              de datos final, eliminando ruido. Se hace al final para poder
+              usar cualquier columna si fuera necesario en pasos intermedios.
         """
         logger.info("Iniciando pipeline de limpieza de datos.")
         
-        # Secuencia de limpieza:
         self._standardize_column_names()
         self._remove_duplicates()
         self._impute_missing_values()
         self._convert_to_datetime(config)
-        self._drop_unnecessary_columns(config) # Dropping at the end
+        self._drop_unnecessary_columns(config)
         
         logger.info("Pipeline de limpieza completado exitosamente.")
         return self.df
+

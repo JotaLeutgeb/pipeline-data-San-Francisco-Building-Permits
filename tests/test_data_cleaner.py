@@ -36,9 +36,13 @@ class TestDataCleaner(unittest.TestCase):
         }
 
     def test_standardize_is_order_independent(self):
-        """Verifica que la estandarización de columnas es independiente del orden."""
+        """
+        Verifica que la estandarización de columnas es determinista e
+        independiente del orden de entrada. Este test NO debe usar sorted().
+        """
         data = {'Permit Type': [1], 'permit type': [2], 'Permit Status': [3]}
-        df1 = pd.DataFrame(data)
+        # Dos DataFrames con las mismas columnas pero en orden diferente
+        df1 = pd.DataFrame(data, columns=['Permit Type', 'permit type', 'Permit Status'])
         df2 = pd.DataFrame(data, columns=['permit type', 'Permit Status', 'Permit Type'])
 
         cleaner1 = DataCleaner(df1)
@@ -47,9 +51,15 @@ class TestDataCleaner(unittest.TestCase):
         cleaner2 = DataCleaner(df2)
         cleaner2._standardize_column_names()
 
-        self.assertListEqual(sorted(list(cleaner1.df.columns)), sorted(['permittype_0', 'permittype_1', 'permitstatus']))
-        self.assertListEqual(sorted(list(cleaner1.df.columns)), sorted(list(cleaner2.df.columns)))
+        # El orden de salida esperado es ahora canónico, basado en el orden
+        # alfabético de los nombres de las columnas originales.
+        expected_columns = ['permitstatus', 'permittype_0', 'permittype_1']
 
+        # El assert clave: las listas de columnas deben ser idénticas, sin ordenar.
+        # Ambas salidas deben coincidir con el resultado esperado y entre sí.
+        self.assertListEqual(list(cleaner1.df.columns), expected_columns)
+        self.assertListEqual(list(cleaner2.df.columns), expected_columns)
+        
     def test_impute_missing_values(self):
         """Prueba la imputación de valores faltantes después de la estandarización."""
         cleaner = DataCleaner(self.df)
