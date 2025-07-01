@@ -1,7 +1,15 @@
 import logging
 import pandas as pd
+import sys
+import os
+
+# Añade el directorio raíz del proyecto a sys.path
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(PROJECT_ROOT)
+
 from configs import config
 from src.data_cleaner import DataCleaner
+
 
 # Configuración del logger para registrar cada paso del pipeline
 logging.basicConfig(
@@ -78,25 +86,26 @@ def load_data(df: pd.DataFrame, path: str):
         raise
 
 def run_pipeline():
-    """
-    Orquesta la ejecución completa del pipeline ETL.
-    """
-    logger.info("🚀 Inciando pipeline de permisos de construcción de San Francisco.")
+    """Orquesta la ejecución completa del pipeline ETL."""
+    logger.info("🚀 Iniciando pipeline de permisos de construcción.")
     
     try:
-        # 1. Extracción
-        raw_df = extract_data(path=config.DATA_PATH)
+        # 1. Cargar datos
+        raw_df = pd.read_csv(config.DATA_PATH)
         
-        # 2. Transformación
-        cleaned_df = transform_data(df=raw_df, cleaning_config=config.CLEANING_CONFIG)
+        # 2. Cargar configuración (ya está cargada en config.py)
+        cleaning_config = config.CLEANING_CONFIG
+        logger.info("Configuración de limpieza cargada.")
         
-        # 3. Carga
-        load_data(df=cleaned_df, path=config.CLEANED_DATA_PATH)
+        # 3. Instanciar y ejecutar el pipeline de limpieza
+        cleaner = DataCleaner(raw_df)
+        cleaned_df = cleaner.run_cleaning_pipeline(cleaning_config)
         
-        logger.info("✅ Pipeline ejecutado exitosamente.")
-        
+        # 4. Guardar resultado
+        load_data(cleaned_df, config.PROCESSED_DATA_DIR)
+        logger.info("✅ Pipeline completado exitosamente.")
     except Exception as e:
-        logger.critical(f"❌ El pipeline falló en uno de sus pasos. Error: {e}")
+        logger.critical(f"❌ El pipeline falló. Error: {e}", exc_info=True)
 
 if __name__ == '__main__':
     run_pipeline()
