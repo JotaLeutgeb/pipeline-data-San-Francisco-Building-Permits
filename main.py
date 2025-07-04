@@ -2,6 +2,7 @@
 
 import logging
 import pandas as pd
+import yaml
 import sys
 import os
 
@@ -9,7 +10,6 @@ import os
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
 
-# CAMBIO: Importamos el diccionario de configuración, no el módulo.
 from configs.config import PIPELINE_CONFIG
 from src.data_cleaner import DataCleaner
 
@@ -24,21 +24,27 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def load_config(path="configs/config.yml") -> dict:
+    logger.info(f"Cargando configuración desde {path}...")
+    with open(path, 'r') as f:
+        return yaml.safe_load(f)
+
 def run_pipeline():
     """Orquesta la ejecución completa del pipeline ETL."""
     logger.info("Iniciando pipeline de permisos de construcción.")
     
     try:
         # 1. EXTRACCIÓN
+        config = load_config()
+        data_path = config['data_path']
         data_path = PIPELINE_CONFIG['data_path']
         logger.info(f"Extrayendo datos de: {data_path}")
         raw_df = pd.read_csv(data_path)
         
         # 2. TRANSFORMACIÓN
+        cleaner = DataCleaner(raw_df, config)
         logger.info("Iniciando la fase de transformación...")
-        # CAMBIO: Instanciamos DataCleaner pasándole el DataFrame y la configuración.
         cleaner = DataCleaner(raw_df, PIPELINE_CONFIG)
-        # CAMBIO: run_cleaning_pipeline ya no necesita argumentos.
         cleaned_df = cleaner.run_cleaning_pipeline()
         
         # 3. CARGA
