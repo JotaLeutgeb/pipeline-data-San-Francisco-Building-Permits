@@ -26,6 +26,7 @@ class DataCleaner:
         self.df = df.copy() # Copiamos para evitar efectos secundarios (Side Effects)
         self.config = config
         self.processor = DataProcessor()
+        self.report = {}
 
     def _standardize_column_names(self):
         # Tu método de estandarización es robusto y determinista. ¡Lo mantenemos!
@@ -114,7 +115,9 @@ class DataCleaner:
         No necesita recibir ningún argumento.
         """
         logger.info("Iniciando pipeline de limpieza de datos.")
-        
+        initial_rows = len(self.df)
+        self.report['initial_rows'] = initial_rows
+
         # El orden es importante:
         # 1. Duplicados primero para reducir datos.
         self._remove_duplicates() 
@@ -133,5 +136,13 @@ class DataCleaner:
         #    Esto asegura que la configuración (que usa nombres originales) funcione.
         self._standardize_column_names()
 
+        final_rows = len(self.df)
+        self.report['final_rows'] = final_rows
+        self.report['rows_dropped'] = initial_rows - final_rows
+
+
         logger.info("Pipeline de limpieza completado exitosamente.")
         return self.df
+    
+def get_report(self):
+        return self.report

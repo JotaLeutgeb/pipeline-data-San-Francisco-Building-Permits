@@ -47,6 +47,14 @@ def run_pipeline():
         cleaner = DataCleaner(raw_df, PIPELINE_CONFIG)
         cleaned_df = cleaner.run_cleaning_pipeline()
         
+        #2.5 REPORTING 
+        report = cleaner.get_report()
+        logger.info("--- Resumen de Limpieza ---")
+        logger.info(f"Filas iniciales: {report['initial_rows']}")
+        logger.info(f"Filas finales: {report['final_rows']}")
+        logger.info(f"Total de filas eliminadas: {report['rows_dropped']}")
+        logger.info("---------------------------")
+
         # 3. CARGA
         output_path = PIPELINE_CONFIG['PROCESSED_DATA_PATH'] / "permisos_limpios.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True) # Asegura que el directorio exista
@@ -54,6 +62,8 @@ def run_pipeline():
         cleaned_df.to_csv(output_path, index=False)
         
         logger.info("✅ Pipeline completado exitosamente.")
+        # Imprimir el resumen
+        
         
     except FileNotFoundError:
         logger.error(f"❌ ERROR: El archivo de datos no fue encontrado en '{data_path}'.")
