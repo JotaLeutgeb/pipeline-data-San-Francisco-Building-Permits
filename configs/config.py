@@ -1,12 +1,16 @@
 from pathlib import Path
 import yaml
 
+# -----------------------------------------------------------------------------
+# CONFIGURACIÓN DEL PROYECTO
+# -----------------------------------------------------------------------------
 # --- 1. Define the Project Root Directory ---
 # This robustly finds the project's root folder by going up two levels
 # from the current file's location (/configs/config.py).
 # Path(__file__).parent -> /configs
 # Path(__file__).parent.parent -> / (the project root)
 ROOT_DIR = Path(__file__).resolve().parent.parent
+
 
 # --- 2. Build Other Important Paths from the Root ---
 # Using the "/" operator from pathlib makes these paths work on any OS (Windows, Mac, Linux).
@@ -36,13 +40,47 @@ IMPUTATION_RULES = {
 
 # El config principal ahora incluye las reglas de imputación
 CONFIG_DIR['imputation_rules'] = IMPUTATION_RULES
-# --- FIN DE LA NUEVA SECCIÓN ---
 
-# --- Optional: Print paths for verification during development ---
-# You can uncomment this block and run `python configs/config.py` to check paths.
-#if __name__ == '__main__':
-#     print(f"Project Root Directory: {ROOT_DIR}")
-#     print(f"Source Data Directory: {SOURCE_DATA_DIR}")
-#     print(f"Processed Data Directory: {PROCESSED_DATA_DIR}")
-#     print(f"Source Code Directory: {SRC_DIR}")
+# -----------------------------------------------------------------------------
+# CONFIGURACIÓN PARA EL MANEJO DE VALORES NULOS
+# -----------------------------------------------------------------------------
+# Define las estrategias para imputar o eliminar valores nulos en columnas específicas.
+# El pipeline aplicará estas reglas en el orden definido.
+# -----------------------------------------------------------------------------
+NULL_HANDLING_CONFIG = {
+    # Estrategia 1: Eliminar filas si estas columnas clave son nulas.
+    # Justificación: Un registro sin un identificador único es inútil.
+    "drop_rows_if_null": [
+        "Record ID"
+        ],
 
+    # Estrategia 2: Imputar como una categoría específica.
+    # Justificación: El nulo es informativo (MNAR). Un permiso sin fecha de
+    # finalización significa que sigue "En Curso".
+    "impute_as_category": {
+        "Completed Date": "Ongoing",
+        "Expiration Date": "Does Not Expire"
+    },
+
+    # Estrategia 3: Imputar con la mediana (para variables numéricas).
+    # Justificación: La mediana es robusta a valores extremos (outliers).
+    # Evita que un permiso de construcción de un rascacielos distorsione la media.
+    "impute_with_median": [
+        "Estimated Cost",
+        "Revised Cost",
+        "Existing Units",
+        "Proposed Units"
+    ],
+
+    # Estrategia 4: Imputar con la moda (para variables categóricas).
+    # Justificación: Usar el valor más frecuente es una suposición segura
+    # para datos categóricos cuando la ausencia parece aleatoria (MAR).
+    "impute_with_mode": [
+        "Permit Type Definition",
+        "Street Suffix",
+        "Existing Construction Type Description",
+        "Proposed Construction Type Description",
+        "Supervisor District",
+        "Zipcode"
+    ]
+}
