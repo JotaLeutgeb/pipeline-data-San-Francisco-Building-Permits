@@ -5,6 +5,7 @@ import pandas as pd
 import yaml
 import sys
 import os
+import traceback
 
 # Añadir el directorio raíz al path para que las importaciones funcionen
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -29,7 +30,7 @@ def load_config(path="configs/config.yml") -> dict:
     with open(path, 'r') as f:
         return yaml.safe_load(f)
 
-def run_pipeline():
+def main():
     """Orquesta la ejecución completa del pipeline ETL."""
     logger.info("Iniciando pipeline de permisos de construcción.")
     
@@ -61,16 +62,27 @@ def run_pipeline():
         logger.info(f"Cargando datos limpios en: {output_path}")
         cleaned_df.to_csv(output_path, index=False)
         
-        logger.info("✅ Pipeline completado exitosamente.")
-        # Imprimir el resumen
+        logger.info("Pipeline completado exitosamente.")
         
-        
-    except FileNotFoundError:
-        logger.error(f"❌ ERROR: El archivo de datos no fue encontrado en '{data_path}'.")
-        sys.exit(1)
+    except FileNotFoundError as e:
+        logging.error("Error: Archivo de entrada no encontrado.")
     except Exception as e:
-        logger.critical(f"❌ El pipeline falló de forma inesperada. Error: {e}", exc_info=True)
-        sys.exit(1)
+        logging.error(f"Ocurrió un error inesperado: {e}")
 
-if __name__ == '__main__':
-    run_pipeline()
+if __name__ == "__main__":
+    try:
+        logging.info("INICIO: Pipeline de procesamiento de permisos de construcción")
+        main()
+        logging.info("FIN: Pipeline ejecutado exitosamente.")
+
+    except FileNotFoundError as e:
+        logging.error(f"Error de Extracción: No se pudo encontrar el archivo de entrada. Revisa la ruta en .env. Detalles: {e}")
+    except pd.errors.EmptyDataError as e: # Existe archivo, no tiene columnas
+        logging.error(f"Error de Extracción: El archivo de entrada está vacío. Detalles: {e}")
+    except KeyError as e: # Se intenta buscar una columna que no existe
+        logging.error(f"Error de Transformación: Falta una columna esperada en los datos. Columna: {e}")
+    except ValueError as e: # Argumento de tipo correcto perovaloor inapropiado
+        logging.error(f"Error de Transformación: Error en el valor de un dato, posiblemente un tipo incorrecto. Detalles: {e}")
+    except Exception as e: # Aplica a cualquier otro error no especificado
+        logging.error(f"Ocurrió un error no manejado en el pipeline: {e}")
+        logging.error(f"Traceback completo:\n{traceback.format_exc()}")
