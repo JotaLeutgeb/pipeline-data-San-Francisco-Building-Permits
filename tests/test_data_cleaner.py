@@ -1,106 +1,95 @@
+# tests/test_data_cleaner.py
+
 import unittest
-import pandas as pd
-import numpy as np
 import sys
 import os
 
-# Añadir el directorio raíz al path
+os.environ['PYSPARK_PYTHON'] = sys.executable
+os.environ['PYSPARK_DRIVER_PYTHON'] = sys.executable
+
+from pyspark.sql import SparkSession
+from pyspark.sql.types import StructType, StructField, IntegerType, StringType, DoubleType
+
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.append(PROJECT_ROOT)
 
 from src.data_cleaner import DataCleaner
 
 class TestDataCleaner(unittest.TestCase):
-    """
-    Suite de pruebas unificada para la clase DataCleaner.
-    """
+    @classmethod
+    def setUpClass(cls):
+        cls.spark = SparkSession.builder.appName("PySparkCleanerTests").master("local[2]").getOrCreate()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.spark.stop()
 
     def setUp(self):
-        """
-        Este método se ejecuta ANTES de cada 'test_*' y prepara los datos
-        y la configuración de prueba.
-        """
-        # Un DataFrame de prueba que contiene todos los casos que queremos probar.
-        self.test_data = {
-            'Record ID': [1, 2, 3, 4, np.nan],                           # --> Fila con NaN será eliminada
-            'Permit Type': ['A', 'B', 'A', np.nan, 'A'],                 # --> Nulo se imputará con moda 'A'
-            'Completed Date': ['2023-01-01', np.nan, '2023-02-01', '2023-03-01', '2023-04-01'], # --> Nulo se imputará con 'Ongoing'
-            'Estimated Cost': [100.0, 200.0, 600.0, np.nan, 300.0],       # --> Nulo se imputará con la mediana
-            'PERMIT CREATION DATE': ['2023-01-01', '2023-01-02', '2023-01-03', '2023-01-04', '2023-01-05'], # --> Para estandarización
-            'col_a_eliminar': [1, 2, 3, 4, 5]
-        }
-        self.df = pd.DataFrame(self.test_data)
+        """Prepara los datos y la configuración para cada test."""
+        test_data = [
+            (1, 'A', '2023-01-01', 100.0, '2023-01-01', 'eliminar_1'),
+            (2, 'B', None, 200.0, '2023-01-02', 'eliminar_2'),
+            (3, 'A', '2023-02-01', 600.0, '2023-01-03', 'eliminar_3'),
+            (4, None, '2023-03-01', None, '2023-01-04', 'eliminar_4'),
+            (None, 'A', '2023-04-01', 300.0, '2023-01-05', 'eliminar_5'),
+            (1, 'A', '2023-01-01', 100.0, '2023-01-01', 'eliminar_1'),
+        ]
         
-        # Una configuración de prueba que refleja la estructura de la configuración principal.
+        # El esquema usa los nombres de columna originales y "sucios"
+        schema = StructType([
+            StructField("Record ID", IntegerType(), True),
+            StructField("Permit Type", StringType(), True),
+            StructField("Completed Date", StringType(), True),
+            StructField("Estimated Cost", DoubleType(), True),
+            StructField("Permit Creation Date", StringType(), True),
+            StructField("col a eliminar", StringType(), True), # Nombre con espacios
+        ])
+
+        self.df = self.spark.createDataFrame(data=test_data, schema=schema)
+
+        # La configuración del test sigue usando los nombres originales
         self.test_config = {
-            "cols_to_drop": ["col_a_eliminar"],
-            "NULL_HANDLING_CONFIG": {
+            "cols_to_drop": ["col a eliminar"],
+            "date_cols": ["Permit Creation Date"],
+            "null_handling_config": {
                 "drop_rows_if_null": ["Record ID"],
                 "impute_as_category": {"Completed Date": "Ongoing"},
                 "impute_with_median": ["Estimated Cost"],
                 "impute_with_mode": ["Permit Type"]
             }
         }
-
-    def test_drop_rows_on_null(self):
-        """Prueba que las filas se eliminan correctamente."""
-        cleaner = DataCleaner(self.df, self.test_config)
-        cleaner.handle_null_values()
-        # El DataFrame original tiene 5 filas, una con 'Record ID' nulo. Deberían quedar 4.
-        self.assertEqual(len(cleaner.df), 4)
-        self.assertFalse(cleaner.df['Record ID'].isnull().any())
-
-    def test_impute_as_category(self):
-        """Prueba la imputación de nulos con un valor categórico constante."""
-        cleaner = DataCleaner(self.df, self.test_config)
-        cleaner.handle_null_values()
-        # La fila con índice 1 tenía un NaN en 'Completed Date'
-        # Después de eliminar la fila 4, la fila con ID 2 (índice 1) debería tener 'Ongoing'.
-        self.assertEqual(cleaner.df[cleaner.df['Record ID'] == 2]['Completed Date'].iloc[0], 'Ongoing')
+        self.cleaner = DataCleaner(self.test_config)
+    
+    def test_unit_name_map_creation_with_collision(self):
+        """REFACTORED: Verifica que la creación del mapa de nombres maneje colisiones."""
+        original_cols = ["Test Name", "test_name", "Another Col"]
+        cleaner = DataCleaner({}) # No necesita config para este test
+        name_map = cleaner._create_name_map(original_cols)
         
-    def test_impute_with_median(self):
-        """Prueba la imputación de nulos con la mediana."""
-        # Mediana de [100.0, 200.0, 600.0, 300.0] es (200+300)/2 = 250.0
-        cleaner = DataCleaner(self.df, self.test_config)
-        cleaner.handle_null_values()
-        expected_median = 200.0
-        self.assertEqual(cleaner.df[cleaner.df['Record ID'] == 4]['Estimated Cost'].iloc[0], expected_median)
+        expected_map = {
+            "Another Col": "anothercol",
+            "Test Name": "testname_0", # Ordenado alfabéticamente
+            "test_name": "testname_1"
+        }
+        self.assertEqual(name_map, expected_map)
 
-    def test_impute_with_mode(self):
-        """Prueba la imputación de nulos con la moda."""
-        # La moda de ['A', 'B', 'A', 'A'] (sin contar el NaN) es 'A'
-        cleaner = DataCleaner(self.df, self.test_config)
-        cleaner.handle_null_values()
-        expected_mode = 'A'
-        # La fila con ID 4 (índice 3) tenía el NaN en 'Permit Type'
-        self.assertEqual(cleaner.df[cleaner.df['Record ID'] == 4]['Permit Type'].iloc[0], expected_mode)
+    def test_unit_median_imputation_is_correctly_applied(self):
+        """NEW: Verifica de forma aislada que la imputación de la mediana funciona."""
+        schema = StructType([StructField("id", IntegerType()), StructField("costo", DoubleType())])
+        data = [(1, 10.0), (2, 80.0), (3, None), (4, 30.0)]
+        df_minimal = self.spark.createDataFrame(data, schema)
         
-    def test_standardize_column_names(self):
-        """Prueba la estandarización de nombres de columnas."""
-        cleaner = DataCleaner(self.df, self.test_config)
-        cleaner._standardize_column_names()
-        self.assertIn('permitcreationdate', cleaner.df.columns)
-        self.assertNotIn('PERMIT CREATION DATE', cleaner.df.columns)
+        # Configuración mínima para el test
+        config_minimal = {"null_handling_config": {"impute_with_median": ["costo"]}}
+        cleaner_isolated = DataCleaner(config_minimal)
+        
+        result_df = cleaner_isolated.run_cleaning_pipeline(df_minimal)
+        
+        imputed_value = result_df.filter("id = 3").select("costo").first()[0]
+        self.assertEqual(imputed_value, 30.0)
 
-    def test_full_cleaning_pipeline(self):
-        """Prueba de integración: el pipeline completo debe ejecutarse sin errores."""
-        cleaner = DataCleaner(self.df, self.test_config)
-        cleaned_df = cleaner.run_cleaning_pipeline()
+    def test_integration_full_pipeline(self):
+        """REFACTORED: Verifica el pipeline completo con la nueva arquitectura."""
+        cleaned_df = self.cleaner.run_cleaning_pipeline(self.df)
         
-        # 1. Verificar que la fila con ID nulo fue eliminada.
-        self.assertEqual(len(cleaned_df), 4)
-        self.assertNotIn(np.nan, cleaned_df['recordid'])
-        
-        # 2. Verificar que la columna fue eliminada.
-        self.assertNotIn('col_a_eliminar', cleaned_df.columns)
-        
-        # 3. Verificar que los nombres de columnas están estandarizados y en minúsculas.
-        expected_cols_subset = ['recordid', 'permittype', 'completeddate', 'estimatedcost', 'permitcreationdate']
-        for col in expected_cols_subset:
-            self.assertIn(col, cleaned_df.columns)
-            
-        # 4. Verificar que no quedan nulos en las columnas tratadas.
-        self.assertFalse(cleaned_df[['permittype', 'completeddate', 'estimatedcost']].isnull().any().any())
-
-if __name__ == '__main__':
-    unittest.main(argv=['first-arg-is-ignored'], exit=False)
+        # Las aserciones ahora usan los nombres de columna EST
