@@ -5,7 +5,6 @@ from typing import Dict, Any, List, Union
 from collections import defaultdict
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as F
-from pyspark.sql.types import TimestampType
 
 logger = logging.getLogger(__name__)
 
@@ -39,19 +38,22 @@ class DataCleaner:
 
     def _translate_config(self, config_item: Union[Dict, List, Any], name_map: Dict[str, str]) -> Union[Dict, List, Any]:
         """
-        NEW: Recorre recursivamente la configuración del usuario y la traduce usando el name_map.
-        Reemplaza tanto claves como valores que correspondan a nombres de columnas.
+        Lanza un error si una columna en la lista de configuración no existe.
         """
         if isinstance(config_item, dict):
             new_dict = {}
             for key, value in config_item.items():
-                translated_key = name_map.get(key, key)
+                # Las claves de los diccionarios pueden ser nombres de columna
+                translated_key = name_map.get(key, key) 
                 translated_value = self._translate_config(value, name_map)
                 new_dict[translated_key] = translated_value
             return new_dict
         elif isinstance(config_item, list):
-            return [self._translate_config(item, name_map) for item in config_item]
+            # Se asume que las listas en la configuración contienen nombres de columnas.
+            # Si un item no está en el mapa, es un error de configuración.
+            return [name_map[item] for item in config_item]
         elif isinstance(config_item, str):
+            # Los valores string también pueden ser nombres de columna (caso límite)
             return name_map.get(config_item, config_item)
         else:
             return config_item
