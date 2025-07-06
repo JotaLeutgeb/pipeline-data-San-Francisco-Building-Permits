@@ -73,7 +73,7 @@ class TestDataCleaner(unittest.TestCase):
         }
         self.assertEqual(name_map, expected_map)
 
-    def test_unit_median_imputation_is_correctly_applied(self):
+    def test_median_imputation(self):
         """NEW: Verifica de forma aislada que la imputación de la mediana funciona."""
         schema = StructType([StructField("id", IntegerType()), StructField("costo", DoubleType())])
         data = [(1, 10.0), (2, 80.0), (3, None), (4, 30.0)]
@@ -87,6 +87,42 @@ class TestDataCleaner(unittest.TestCase):
         
         imputed_value = result_df.filter("id = 3").select("costo").first()[0]
         self.assertEqual(imputed_value, 30.0)
+
+    def test_mode_imputation(self):
+        """
+        NEW: Verifica de forma aislada que la imputación de la moda funciona.
+        """
+        schema = StructType([StructField("id", IntegerType()), StructField("animal", StringType())])
+        data = [(1, "gato"), (2, "perro"), (3, None), (4, "gato"), (5, "loro")] # Moda es 'gato'
+        df_minimal = self.spark.createDataFrame(data, schema)
+        
+        config_minimal = {"null_handling_config": {"impute_with_mode": ["animal"]}}
+        cleaner_isolated = DataCleaner(config_minimal)
+
+        result_df = cleaner_isolated.run_cleaning_pipeline(df_minimal)
+
+        imputed_value = result_df.filter("id = 3").select("animal").first()[0]
+        self.assertEqual(imputed_value, "gato")
+
+    def test_category_imputation(self):
+        """
+        NEW: Verifica de forma aislada que la imputación por categoría fija funciona.
+        """
+        schema = StructType([StructField("id", IntegerType()), StructField("status", StringType())])
+        data = [(1, "Completado"), (2, None)]
+        df_minimal = self.spark.createDataFrame(data, schema)
+
+        config_minimal = {
+            "null_handling_config": {
+                "impute_as_category": {"status": "Desconocido"}
+            }
+        }
+        cleaner_isolated = DataCleaner(config_minimal)
+
+        result_df = cleaner_isolated.run_cleaning_pipeline(df_minimal)
+
+        imputed_value = result_df.filter("id = 2").select("status").first()[0]
+        self.assertEqual(imputed_value, "Desconocido")
 
     def test_integration_full_pipeline(self):
         """REFACTORED: Verifica el pipeline completo con la nueva arquitectura."""
