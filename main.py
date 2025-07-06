@@ -43,7 +43,6 @@ def main():
         raw_df = pd.read_csv(data_path)
         
         # 2. TRANSFORMACIÓN
-        cleaner = DataCleaner(raw_df, config)
         logger.info("Iniciando la fase de transformación...")
         cleaner = DataCleaner(raw_df, PIPELINE_CONFIG)
         cleaned_df = cleaner.run_cleaning_pipeline()
