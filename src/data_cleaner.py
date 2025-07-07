@@ -73,7 +73,7 @@ class DataCleaner:
                 df = df.withColumn(col, F.to_timestamp(F.col(col)))
         return df
 
-    def handle_null_values(self, df: DataFrame, internal_config: Dict) -> DataFrame:
+    def _handle_null_values(self, df: DataFrame, internal_config: Dict) -> DataFrame:
         """REFACTORED: Ahora usa la configuración interna con nombres limpios."""
         null_config = internal_config.get("null_handling_config", {})
         if not null_config:
@@ -106,7 +106,7 @@ class DataCleaner:
 
     def run_cleaning_pipeline(self, df: DataFrame) -> DataFrame:
         """
-        REFACTORED: Implementa la nueva arquitectura robusta.
+        Ejecuta el pipeline de limpieza de datos completo.
         """
         logger.info("Iniciando pipeline de limpieza con arquitectura robusta.")
         initial_rows = df.count()
@@ -126,7 +126,7 @@ class DataCleaner:
         df_cleaned = self._remove_duplicates(df_cleaned)
         df_cleaned = self._drop_unnecessary_columns(df_cleaned, internal_config)
         df_cleaned = self._convert_to_datetime(df_cleaned, internal_config)
-        df_cleaned = self.handle_null_values(df_cleaned, internal_config)
+        df_cleaned = self._handle_null_values(df_cleaned, internal_config)
         
         # 5. Ordenar columnas para un output consistente
         df_cleaned = df_cleaned.select(sorted(df_cleaned.columns))
