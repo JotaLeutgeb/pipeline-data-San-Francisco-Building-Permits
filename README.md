@@ -1,6 +1,7 @@
 # San Francisco Building Permits Data Pipeline
 
-This project implements a data pipeline to process, clean, and analyze building permit data from San Francisco.
+## Context
+A building permit is an official approval document issued by a governmental agency that allows you or your contractor to proceed with a construction or remodeling project on one's property. Each city or county has its own office related to buildings, that can do multiple functions like issuing permits, inspecting buildings to enforce safety measures, modifying rules to accommodate needs of the growing population etc
 
 ---
 
