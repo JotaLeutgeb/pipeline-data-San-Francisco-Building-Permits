@@ -23,7 +23,7 @@ date_cols:
 
 null_handling_config:
   drop_rows_if_null:
-    - "Record ID"  # como ya tienes
+    - "Record ID"
 
   impute_as_category:
     "Completed Date": "Ongoing"
