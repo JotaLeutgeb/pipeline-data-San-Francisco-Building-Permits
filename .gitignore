@@ -67,3 +67,4 @@ venv.bak/
 # Data files
 data/processed/
 data/raw/
+/research
