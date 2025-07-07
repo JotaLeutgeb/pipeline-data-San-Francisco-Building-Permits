@@ -60,7 +60,7 @@ class TestDataCleaner(unittest.TestCase):
         }
         self.cleaner = DataCleaner(self.test_config)
     
-    def test_unit_name_map_creation_with_collision(self):
+    def test_map_creation_with_collision(self):
         """REFACTORED: Verifica que la creación del mapa de nombres maneje colisiones."""
         original_cols = ["Test Name", "test_name", "Another Col"]
         cleaner = DataCleaner({}) # No necesita config para este test
@@ -84,7 +84,7 @@ class TestDataCleaner(unittest.TestCase):
         cleaner_isolated = DataCleaner(config_minimal)
         
         result_df = cleaner_isolated.run_cleaning_pipeline(df_minimal)
-        
+                                                                                                                                                                                                                                                          
         imputed_value = result_df.filter("id = 3").select("costo").first()[0]
         self.assertEqual(imputed_value, 30.0)
 
