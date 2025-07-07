@@ -1,5 +1,4 @@
 # main.py
-
 import logging
 import pandas as pd
 import yaml
@@ -11,7 +10,6 @@ import traceback
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
 
-from configs.config import DATA_PATH
 from src.data_cleaner import DataCleaner
 
 # Configuración del logger (sin cambios)
