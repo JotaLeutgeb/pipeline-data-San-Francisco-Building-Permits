@@ -11,7 +11,7 @@ import traceback
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(PROJECT_ROOT)
 
-from configs.config import PIPELINE_CONFIG
+from configs.config import DATA_PATH
 from src.data_cleaner import DataCleaner
 
 # Configuración del logger (sin cambios)
@@ -38,13 +38,12 @@ def main():
         # 1. EXTRACCIÓN
         config = load_config()
         data_path = config['data_path']
-        data_path = PIPELINE_CONFIG['data_path']
         logger.info(f"Extrayendo datos de: {data_path}")
         raw_df = pd.read_csv(data_path)
         
         # 2. TRANSFORMACIÓN
         logger.info("Iniciando la fase de transformación...")
-        cleaner = DataCleaner(raw_df, PIPELINE_CONFIG)
+        cleaner = DataCleaner(raw_df, config)
         cleaned_df = cleaner.run_cleaning_pipeline()
         
         #2.5 REPORTING 
@@ -56,7 +55,7 @@ def main():
         logger.info("---------------------------")
 
         # 3. CARGA
-        output_path = PIPELINE_CONFIG['PROCESSED_DATA_PATH'] / "permisos_limpios.csv"
+        output_path = config['processed_data_path'] / "permisos_limpios.csv"
         output_path.parent.mkdir(parents=True, exist_ok=True) # Asegura que el directorio exista
         logger.info(f"Cargando datos limpios en: {output_path}")
         cleaned_df.to_csv(output_path, index=False)
