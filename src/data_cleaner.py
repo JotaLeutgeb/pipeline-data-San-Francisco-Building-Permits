@@ -1,20 +1,60 @@
 # src/data_cleaner.py
-
+import pandas as pd
 import logging
-from typing import Dict, Any, List, Union
+from typing import Dict, Any, List, Union, Set
 from collections import defaultdict
 from pyspark.sql import DataFrame
 import pyspark.sql.functions as F
+from pydantic import ValidationError
+from .config_schema import MainConfig
+import yaml
 
 logger = logging.getLogger(__name__)
 
 class DataCleaner:
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any], config_path: str):
+        """
+        Construye y valida la 'máquina de limpieza'.
+
+        Args:
+            config_path (str): La ruta al archivo de configuración YAML.
+        
+        Raises:
+            ValidationError: Si la configuración no cumple con el esquema.
+            FileNotFoundError: Si la ruta al config no existe.
+        """
         if not isinstance(config, dict):
             raise TypeError("La configuración debe ser un diccionario.")
+        
+        try:
+            with open(config_path, 'r') as f:
+                raw_config = yaml.safe_load(f)
+            # Transformar el dict crudo en un objeto Pydantic validado.
+            self.config: MainConfig = MainConfig.parse_obj(raw_config)
+            logger.info(f"✅ Máquina DataCleaner configurada y lista para usarse.")
+        except ValidationError as e:
+            logging.error(f"❌ Error Crítico de Configuración en '{config_path}':")
+            raise e
+        except FileNotFoundError:
+            logging.error(f"❌ Error Crítico: No se encontró el archivo de configuración en '{config_path}'")
+            raise
+
         self.config = config
         self.report = {}
 
+    def _validate_config_against_df(self, df: pd.DataFrame):
+        """
+        Valida que las columnas en el config existan en el DataFrame.
+        """
+        # ... (la lógica interna de este método no cambia) ...
+        logger.info("Verificando consistencia entre configuración y DataFrame...")
+        df_columns_set: Set[str] = set(df.columns)
+        config_cols = self.config.cleaning_config.cols_to_drop # Ejemplo
+        for col in config_cols:
+            if col not in df_columns_set:
+                raise ValueError(f"La columna '{col}' no existe en el DataFrame.")
+        logger.info("Verificación semántica exitosa.")
+    
     def _create_name_map(self, original_cols: List[str]) -> Dict[str, str]:
         """
         NEW: Crea un mapa de nombres de columna originales a estandarizados, manejando colisiones.
@@ -111,6 +151,10 @@ class DataCleaner:
         logger.info("Iniciando pipeline de limpieza con arquitectura robusta.")
         initial_rows = df.count()
         self.report['initial_rows'] = initial_rows
+        logger.info(f"Filas iniciales: {initial_rows}")
+        # Validación Semántica: ocurre aquí, en el momento justo.
+        df = df.copy()
+        self._validate_config_against_df(df)
 
         # 1. Generar el mapa de nombres
         name_map = self._create_name_map(df.columns)
@@ -134,7 +178,10 @@ class DataCleaner:
         final_rows = df_cleaned.count()
         self.report['final_rows'] = final_rows
         self.report['rows_dropped'] = initial_rows - final_rows
-
+        logger.info(f"Filas finales: {final_rows}")
+        logger.info(f"Total de filas eliminadas: {self.report['rows_dropped']}")
+        
+        # Finalizacion del pipeline
         logger.info("Pipeline de limpieza en PySpark completado.")
         return df_cleaned
 
