@@ -2,7 +2,6 @@
 data_path: "data/raw/building_permits.csv"
 processed_data_path: "data/processed/permisos_limpios.csv"
 
-
 cols_to_drop:
   - "Street Number Suffix"
   - "Unit Suffix"
@@ -23,7 +22,7 @@ date_cols:
 
 null_handling_config:
   drop_rows_if_null:
-    - "Record ID"
+    - "Record ID" #Dropeamos IDS nulos
 
   impute_as_category:
     "Completed Date": "Ongoing"
