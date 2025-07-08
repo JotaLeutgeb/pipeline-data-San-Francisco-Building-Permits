@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-# --- Rutas del Proyecto (Esto está bien como está) ---
-ROOT_PATH = Path(__file__).resolve().parent.parent
+# --- Rutas del Proyecto ---
+ROOT_PATH = Path().resolve().parent
 DATA_PATH = ROOT_PATH / "data"
 RAW_DATA_PATH= DATA_PATH / "raw"
 PROCESSED_DATA_PATH = DATA_PATH / "processed"
