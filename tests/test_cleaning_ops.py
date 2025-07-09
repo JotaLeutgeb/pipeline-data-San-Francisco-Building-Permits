@@ -1,8 +1,7 @@
 # tests/test_cleaning_operations.py
-import pytest
 import pyspark.sql.functions as F
 from pyspark.sql.types import StructType, StructField, StringType, DoubleType, IntegerType
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from src.data_cleaner import DataCleaner
 

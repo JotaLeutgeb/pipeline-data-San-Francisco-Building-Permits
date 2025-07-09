@@ -1,7 +1,5 @@
 # tests/test_reporting.py
-import pytest
 import json
-from pathlib import Path
 
 from src.cleaning_report import CleaningReport, ColumnDropReport, NullHandlingReport, DuplicateReport
 

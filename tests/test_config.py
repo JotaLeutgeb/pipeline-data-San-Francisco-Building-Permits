@@ -2,7 +2,6 @@
 import pytest
 import yaml
 from pydantic import ValidationError
-from pyspark.sql import SparkSession
 
 from src.config_schema import MainConfig
 from src.data_cleaner import DataCleaner
