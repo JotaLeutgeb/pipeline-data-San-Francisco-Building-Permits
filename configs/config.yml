@@ -19,7 +19,7 @@ cleaning_config:
     - "Current Status Date"
     - "Issued Date"
     - "Filed Date"
-    - "Approved Date" 
+    - "approved_date" 
 
   null_handling_config:
     drop_rows_if_null:
@@ -27,7 +27,6 @@ cleaning_config:
 
     impute_with_category:
       "Completed Date": "Ongoing"
-      "Expiration Date": "Does Not Expire"
       "Application Submission Method": "Unknown"  # pocos nulos (~4k)
       "neighborhoods_analysis_boundaries": "Unknown"  # pocos nulos (~4k)
       "Location": "Unknown"
@@ -44,7 +43,7 @@ cleaning_config:
       - "Street Suffix"
       - "Existing Construction Type Description"
       - "Proposed Construction Type Description"
-      - "Supervisor District"
+      - "supervisor_district"
       - "Zipcode"
       - "Existing Use"
       - "Proposed Use"
