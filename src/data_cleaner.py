@@ -6,12 +6,15 @@ from collections import defaultdict
 from pathlib import Path
 import yaml
 import re
+import json
 
+# Pyspark
 from pyspark.sql import DataFrame, SparkSession
 import pyspark.sql.functions as F
 from pyspark.sql.types import DateType
 from datetime import datetime as py_datetime
 
+# Pydantic
 from pydantic import ValidationError
 from .config_schema import MainConfig
 from .cleaning_report import CleaningReport
@@ -30,10 +33,20 @@ def _safe_parse_date(date_str: str) -> py_datetime.date:
     
     # Lista de formatos de fecha a intentar en orden de prioridad.
     formats_to_try = [
-        "%Y-%m-%d",        # "2023-01-30"
+        "%Y-%m-%d",# "2023-01-30"
+        "%Y/%m/%d",# "2023/01/30"  
         "%Y-%m-%dT%H:%M:%S",# "2023-01-30T10:00:00"
+        "%Y/%m/%dT%H:%M:%S",
+        "%Y/%m/%d %I:%M:%S %p", # "2023/01/30T10:00:00 PM"
         "%m/%d/%Y",        # "01/30/2023"
         "%m/%d/%y",        # "01/30/23"
+        "%d/%m/%Y",        # "30/01/2023"
+        "%d/%m/%y",        # "30/01/23"
+        "%d-%m-%Y",        # "30-01-2023"
+        "%d-%m-%y",        # "30-01-23"
+        "%Y.%m.%d",       # "2023.01.30"
+        "%Y.%m.%d %H:%M:%S",# "2023.
+
     ]
     
     for date_format in formats_to_try:
@@ -128,7 +141,7 @@ class DataCleaner:
             logger.error(f"{error_msg}")
             raise ValueError(error_msg)
         
-        logger.info("✅ Validación de configuración completada")
+        logger.info("Validación de configuración completada")
     
     def _create_column_name_map(self, original_cols: List[str]) -> Dict[str, str]:
         """
@@ -178,7 +191,7 @@ class DataCleaner:
         """
         Traduce la configuración para usar nombres de columna estandarizados.
         """
-        logger.info("🔄 Traduciendo configuración a nombres estandarizados...")
+        logger.info("Traduciendo configuración a nombres estandarizados...")
         
         def translate_item(item):
             if isinstance(item, dict):
@@ -194,7 +207,7 @@ class DataCleaner:
         config_dict = self.config.dict()
         translated_config = translate_item(config_dict)
         
-        logger.info("✅ Configuración traducida")
+        logger.info("Configuración traducida")
         return translated_config
     
     def _drop_columns(self, df: DataFrame, cols_to_drop: List[str]) -> DataFrame:
@@ -202,7 +215,7 @@ class DataCleaner:
         if not cols_to_drop:
             return df
         
-        logger.info(f"🗑️  Eliminando {len(cols_to_drop)} columnas...")
+        logger.info(f"Eliminando {len(cols_to_drop)} columnas...")
         
         # Filtrar columnas que realmente existen
         existing_cols_to_drop = [col for col in cols_to_drop if col in df.columns]
@@ -210,7 +223,7 @@ class DataCleaner:
         if existing_cols_to_drop:
             df = df.drop(*existing_cols_to_drop)
             self.report.column_drop_report.columns_dropped = existing_cols_to_drop
-            logger.info(f"✅ Columnas eliminadas: {existing_cols_to_drop}")
+            logger.info(f"Columnas eliminadas: {existing_cols_to_drop}")
         
         return df
     
@@ -240,7 +253,7 @@ class DataCleaner:
     
     def _handle_null_values(self, df: DataFrame, null_config: Dict[str, Any]) -> DataFrame:
         """Maneja valores nulos según la configuración especificada."""
-        logger.info("🔧 Procesando valores nulos...")
+        logger.info("Procesando valores nulos...")
         
         # 1. Eliminar filas con nulos en columnas críticas
         drop_cols = null_config.get('drop_rows_if_null', [])
@@ -253,7 +266,7 @@ class DataCleaner:
                 
                 if rows_dropped > 0:
                     self.report.null_handling_report.add_null_drop(col, rows_dropped)
-                    logger.info(f"✅ Eliminadas {rows_dropped} filas por nulos en '{col}'")
+                    logger.info(f"Eliminadas {rows_dropped} filas por nulos en '{col}'")
         
         # 2. Imputar con categorías fijas
         category_imputations = null_config.get('impute_with_category', {})
@@ -263,7 +276,7 @@ class DataCleaner:
                 if null_count > 0:
                     df = df.fillna({col: category})
                     self.report.null_handling_report.add_imputation(col, 'category', category, null_count)
-                    logger.info(f"✅ Imputados {null_count} nulos en '{col}' con '{category}'")
+                    logger.info(f"Imputados {null_count} nulos en '{col}' con '{category}'")
         
         # 3. Imputar con mediana
         median_cols = null_config.get('impute_with_median', [])
@@ -275,7 +288,7 @@ class DataCleaner:
                     if median_value is not None:
                         df = df.fillna({col: median_value})
                         self.report.null_handling_report.add_imputation(col, 'median', median_value, null_count)
-                        logger.info(f"✅ Imputados {null_count} nulos en '{col}' con mediana {median_value}")
+                        logger.info(f"Imputados {null_count} nulos en '{col}' con mediana {median_value}")
         
         # 4. Imputar con moda
         mode_cols = null_config.get('impute_with_mode', [])
@@ -288,7 +301,7 @@ class DataCleaner:
                         mode_value = mode_row[0]
                         df = df.fillna({col: mode_value})
                         self.report.null_handling_report.add_imputation(col, 'mode', mode_value, null_count)
-                        logger.info(f"✅ Imputados {null_count} nulos en '{col}' con moda '{mode_value}'")
+                        logger.info(f"Imputados {null_count} nulos en '{col}' con moda '{mode_value}'")
         
         return df
     
@@ -359,9 +372,17 @@ class DataCleaner:
     
     def save_report(self, report_path: str) -> None:
         """Guarda el reporte de limpieza en un archivo."""
-        self.report.save_to_file(report_path)
+        # CORRECCIÓN: Se usa el nombre de método correcto: save_report()
+        self.report.save_report(report_path)
         logger.info(f"Reporte guardado en: {report_path}")
     
     def print_summary(self) -> None:
         """Imprime un resumen ejecutivo del proceso de limpieza."""
-        self.report.print_executive_summary()
+        # CORRECIÓN: Se implementa la lógica para imprimir el resumen.
+        # 1. Obtenemos el diccionario del resumen desde el reporte.
+        summary_dict = self.report.get_summary()
+        
+        # 2. Imprimimos el diccionario en formato JSON para una fácil lectura.
+        logger.info("--- Resumen Ejecutivo del Proceso de Limpieza ---")
+        print(json.dumps(summary_dict, indent=4, ensure_ascii=False))
+        logger.info("-------------------------------------------------")
