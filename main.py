@@ -15,6 +15,7 @@ import sys
 import os
 import traceback
 from pathlib import Path
+import pandas as pd
 
 # Configurar el entorno para que PySpark funcione correctamente.
 os.environ['PYSPARK_PYTHON'] = sys.executable
@@ -51,6 +52,7 @@ def create_spark_session() -> SparkSession:
     try:
         spark = SparkSession.builder \
             .appName("SF_Building_Permits_ETL") \
+            .config("spark.driver.memory", "8g") \
             .config("spark.sql.adaptive.enabled", "true") \
             .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer") \
             .getOrCreate()
@@ -81,31 +83,24 @@ def load_data(spark: SparkSession, data_path: str) -> SparkSession:
 
 
 def save_data(df: SparkSession, output_path_str: str):
-    """Guarda el DataFrame limpio en formato Parquet o CSV."""
+    """Guarda el DataFrame usando pandas para evitar el error de winutils."""
     output_path = Path(output_path_str)
-    logger.info(f"Guardando datos limpios en: {output_path}")
+    logger.info(f"Guardando datos limpios en: {output_path} (usando pandas)")
     output_path.parent.mkdir(parents=True, exist_ok=True)
-
     try:
-        if output_path.suffix.lower() == '.parquet':
-            df.write.mode("overwrite").parquet(str(output_path))
-        else:
-            temp_output_dir = output_path.parent / f"temp_{output_path.stem}"
-            df.coalesce(1).write.mode("overwrite").option("header", "true").csv(str(temp_output_dir))
-            
-            csv_files = list(temp_output_dir.glob("*.csv"))
-            if csv_files:
-                csv_files[0].rename(output_path)
-                for file in temp_output_dir.iterdir():
-                    file.unlink()
-                temp_output_dir.rmdir()
-            else:
-                logger.warning("No se encontró ningún archivo CSV en el directorio temporal para renombrar.")
+        # Convierte el DataFrame de Spark a pandas
+        logger.info("Convirtiendo DataFrame de Spark a pandas. Esto puede tardar y consumir memoria...")
+        pandas_df = df.toPandas()
+        
+        # Usa la función to_csv de pandas, que es directa y no necesita Hadoop
+        logger.info(f"Escribiendo en el archivo: {output_path}")
+        pandas_df.to_csv(output_path, index=False, encoding='utf-8')
 
-        logger.info(f"✅ Datos guardados exitosamente.")
+        logger.info(f"¡Archivo guardado exitosamente!")
     except Exception as e:
-        logger.error(f"Error al guardar los datos: {e}")
+        logger.error(f"Error al guardar los datos con pandas: {e}")
         raise
+
 
 
 def main():
@@ -124,10 +119,11 @@ def main():
         # lo cual ya es una buena práctica.
         # cleaner.config.data_path
         # cleaner.config.processed_data_path
-        
+        full_input_path = paths.ROOT_PATH / cleaner.config.data_path
+
         # EXTRACCIÓN (E)
         logger.info("Iniciando Fase de Extracción...")
-        raw_df = load_data(spark, cleaner.config.data_path)
+        raw_df = load_data(spark, str(full_input_path))
 
         # TRANSFORMACIÓN (T)
         logger.info("Iniciando Fase de Transformación...")
@@ -135,7 +131,6 @@ def main():
 
         # REPORTE
         logger.info("Generando y guardando reporte de limpieza...")
-        report = cleaner.get_detailed_report()
         
         # La ruta del reporte también viene de la configuración.
         report_path = paths.REPORTS_PATH / "cleaning_report.json"
