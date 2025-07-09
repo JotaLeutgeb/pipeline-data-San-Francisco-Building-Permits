@@ -68,3 +68,5 @@ venv.bak/
 data/processed/
 data/raw/
 /research
+/reports
+logs/
